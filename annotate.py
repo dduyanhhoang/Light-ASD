@@ -50,21 +50,20 @@ body { background: #111827; color: #e5e7eb; font-family: monospace;
 
 /* Controls bar */
 #controls { padding: 6px 10px; background: #1f2937; border-top: 1px solid #374151;
-            display: flex; align-items: center; gap: 6px; font-size: 12px; }
+            display: flex; align-items: center; gap: 6px; font-size: 12px; flex-shrink: 0; }
 #controls button { background: #374151; color: #e5e7eb; border: none;
                    padding: 3px 9px; cursor: pointer; border-radius: 3px; font-size: 13px; }
 #controls button:hover { background: #4b5563; }
 #info { margin-left: auto; color: #9ca3af; font-size: 11px; }
 
 /* Timeline */
-#tl-area { height: 100px; background: #0f172a; border-top: 1px solid #374151;
-           padding: 5px 10px 4px; display: flex; flex-direction: column; gap: 3px; }
-#tl-hint { font-size: 10px; color: #4b5563; }
-#tl { width: 100%; flex: 1; cursor: crosshair; display: block; }
+#tl-area { height: 40px; flex-shrink: 0; background: #0f172a; border-top: 3px solid #374151;
+           padding: 4px 10px; overflow: hidden; }
+#tl { width: 100%; height: 32px; cursor: crosshair; display: block; }
 
 /* Toolbar */
 #toolbar { padding: 5px 10px; background: #1f2937; border-top: 1px solid #374151;
-           display: flex; align-items: center; gap: 6px; font-size: 11px; }
+           display: flex; align-items: center; gap: 6px; font-size: 11px; flex-shrink: 0; }
 #toolbar button { border: none; padding: 3px 9px; cursor: pointer;
                   border-radius: 3px; font-size: 11px; color: #e5e7eb; }
 .btn-spk  { background: #166534; } .btn-spk:hover  { background: #15803d; }
@@ -100,7 +99,6 @@ kbd { background:#374151; padding:0 4px; border-radius:2px; }
   </div>
 
   <div id="tl-area">
-    <div id="tl-hint">Score line (top) · Speaking labels (bottom) · Drag to select · <kbd>S</kbd>=speaking <kbd>N</kbd>=not</div>
     <canvas id="tl"></canvas>
   </div>
 
@@ -214,32 +212,25 @@ function drawTimeline() {
   if (!ct) return;
   const cv = document.getElementById('tl');
   const ctx = cv.getContext('2d');
-  const W = cv.clientWidth, H = cv.clientHeight;
+  const W = document.getElementById('tl-area').clientWidth - 20;
+  const H = cv.offsetHeight || 32;
   cv.width = W; cv.height = H;
-  const n = ct.frames.length, fw = W / n, mx = 4;
+  const n = ct.frames.length, fw = W / n;
 
-  ctx.fillStyle = '#0f172a'; ctx.fillRect(0,0,W,H);
+  // Background
+  ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H);
 
-  // Score bars (top 55%)
+  // Green/red bars per frame
   for (let i = 0; i < n; i++) {
-    const s = ct.scores[i], h = Math.abs(s)/mx * H * 0.45;
-    ctx.fillStyle = s > 0 ? '#14532d' : '#450a0a';
-    ctx.fillRect(i*fw, s>0 ? H*0.5-h : H*0.5, Math.max(fw,1), h||1);
+    ctx.fillStyle = ct.labels[i] ? '#166534' : '#7f1d1d';
+    ctx.fillRect(i * fw, 0, Math.max(fw, 1), H);
   }
-  // Zero line
-  ctx.strokeStyle = '#374151'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0,H*0.5); ctx.lineTo(W,H*0.5); ctx.stroke();
 
-  // Label bars (bottom 45%)
-  for (let i = 0; i < n; i++) {
-    ctx.fillStyle = ct.labels[i] ? '#166534' : '#1c1c2e';
-    ctx.fillRect(i*fw, H*0.55, Math.max(fw,1), H*0.45);
-  }
-  // Selection
-  if (selA>=0 && selB>=0) {
-    const s=Math.min(selA,selB), e=Math.max(selA,selB);
-    ctx.fillStyle = 'rgba(234,179,8,0.25)';
-    ctx.fillRect(s*fw, 0, (e-s+1)*fw, H);
+  // Selection overlay
+  if (selA >= 0 && selB >= 0) {
+    const s = Math.min(selA, selB), e = Math.max(selA, selB);
+    ctx.fillStyle = 'rgba(234,179,8,0.3)';
+    ctx.fillRect(s * fw, 0, (e - s + 1) * fw, H);
   }
 }
 function hlTimeline() {
@@ -249,7 +240,7 @@ function hlTimeline() {
   const ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
   const fw = W / ct.frames.length;
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.fillRect(fi*fw, 0, Math.max(fw,1.5), H);
+  ctx.fillRect(fi * fw, 0, Math.max(fw, 2), H);
 }
 
 // Timeline mouse
@@ -322,6 +313,10 @@ document.addEventListener('keydown', async e => {
   else if (e.code==='Escape')     clearSel();
   else if ((e.ctrlKey||e.metaKey) && e.code==='KeyS') { e.preventDefault(); saveAll(); }
 });
+
+new ResizeObserver(() => {
+  if (ct) hlTimeline();
+}).observe(document.getElementById('tl-area'));
 
 init();
 </script>
