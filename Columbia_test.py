@@ -56,11 +56,11 @@ if args.evalCol == True:
 	args.duration = 0
 	if os.path.isfile(args.videoPath) == False:  # Download video
 		link = 'https://www.youtube.com/watch?v=6GzxbrO0DHM&t=2s'
-		cmd = "youtube-dl -f best -o %s '%s'"%(args.videoPath, link)
+		cmd = "yt-dlp -f best -o %s '%s'"%(args.videoPath, link)
 		output = subprocess.call(cmd, shell=True, stdout=None)
 	if os.path.isdir(args.videoFolder + '/col_labels') == False: # Download label
 		link = "1Tto5JBt6NsEOLFRWzyZEeV6kCCddc6wv"
-		cmd = "gdown --id %s -O %s"%(link, args.videoFolder + '/col_labels.tar.gz')
+		cmd = "gdown %s -O %s"%(link, args.videoFolder + '/col_labels.tar.gz')
 		subprocess.call(cmd, shell=True, stdout=None)
 		cmd = "tar -xzvf %s -C %s"%(args.videoFolder + '/col_labels.tar.gz', args.videoFolder)
 		subprocess.call(cmd, shell=True, stdout=None)
