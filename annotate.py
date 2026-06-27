@@ -5,7 +5,11 @@ Then open http://localhost:5000
 
 Controls:
   Space        Play / Pause
+  R            Replay from beginning
   ← / →        Prev / Next frame  (+ Shift = ×10)
+  [ / ]        Prev / Next track
+  I            Mark selection start (in point)
+  O            Mark selection end (out point)
   S            Mark selection as Speaking
   N            Mark selection as Not Speaking
   Escape       Clear selection
@@ -103,6 +107,9 @@ kbd { background:#374151; padding:0 4px; border-radius:2px; }
   </div>
 
   <div id="toolbar">
+    <button class="btn-clr"  onclick="selA=fi;drawTimeline();hlTimeline()">In <kbd>I</kbd></button>
+    <button class="btn-clr"  onclick="selB=fi;drawTimeline();hlTimeline()">Out <kbd>O</kbd></button>
+    <span style="color:#374151">│</span>
     <button class="btn-spk"  onclick="setLbl(1)">Speaking <kbd>S</kbd></button>
     <button class="btn-nspk" onclick="setLbl(0)">Not Speaking <kbd>N</kbd></button>
     <button class="btn-clr"  onclick="clearSel()">Clear <kbd>Esc</kbd></button>
@@ -128,13 +135,17 @@ async function init() {
 function buildSidebar() {
   document.getElementById('track-list').innerHTML = summary.map(t =>
     `<div class="ti" id="ti${t.id}" onclick="loadTrack(${t.id})">
-       <div>#${String(t.id).padStart(3,'0')} &nbsp; ${t.length}f &nbsp; ${t.spk}%spk</div>
+       <div id="tt${t.id}">#${String(t.id).padStart(3,'0')} &nbsp; ${t.length}f &nbsp; ${t.spk}%spk</div>
        <div class="ti-bar"><div class="ti-fill" id="tf${t.id}" style="width:${t.spk}%"></div></div>
      </div>`).join('');
 }
 
 // ── Track loading ─────────────────────────────────────────────────────────────
 async function loadTrack(id) {
+  if (ct && ct.id !== id && dirty.has(ct.id)) {
+    const ok = confirm(`Track #${String(ct.id).padStart(3,'0')} has unsaved changes.\nLeave without saving?`);
+    if (!ok) return;
+  }
   stopPlay(); selA = selB = -1;
   if (!loaded[id]) loaded[id] = await (await fetch(`/api/track/${id}`)).json();
   ct = loaded[id]; ct.id = id; fi = 0;
@@ -202,7 +213,8 @@ function stopPlay() {
   aud.pause();
 }
 async function seekTo(idx) {
-  stopPlay(); fi = idx;
+  stopPlay();
+  fi = ct ? Math.max(0, Math.min(idx, ct.frames.length - 1)) : Math.max(0, idx);
   if (ct) aud.currentTime = ct.frames[fi] / 25;
   await drawFrame();
 }
@@ -229,7 +241,7 @@ function drawTimeline() {
   // Selection overlay
   if (selA >= 0 && selB >= 0) {
     const s = Math.min(selA, selB), e = Math.max(selA, selB);
-    ctx.fillStyle = 'rgba(234,179,8,0.3)';
+    ctx.fillStyle = 'rgba(59,130,246,0.6)';
     ctx.fillRect(s * fw, 0, (e - s + 1) * fw, H);
   }
 }
@@ -259,7 +271,9 @@ tlc.addEventListener('mousemove', e => {
 });
 tlc.addEventListener('mouseup', async e => {
   dragging = false; selB = xToFrame(e);
-  fi = Math.min(selA, selB); await drawFrame(); drawTimeline(); hlTimeline();
+  fi = Math.min(selA, selB);
+  if (ct) aud.currentTime = ct.frames[fi] / 25;
+  await drawFrame(); drawTimeline(); hlTimeline();
 });
 
 // ── Label editing ─────────────────────────────────────────────────────────────
@@ -273,8 +287,11 @@ async function setLbl(val) {
   const spk = Math.round(100 * ct.labels.filter(x=>x).length / ct.labels.length);
   const bar = document.getElementById(`tf${ct.id}`);
   if (bar) bar.style.width = spk + '%';
+  const txt = document.getElementById(`tt${ct.id}`);
+  if (txt) txt.textContent = `#${String(ct.id).padStart(3,'0')}   ${ct.frames.length}f   ${spk}%spk`;
   const sm = summary.find(x=>x.id===ct.id); if(sm) sm.spk=spk;
   status(`${e-s+1} frame(s) → ${val?'speaking':'not speaking'}`);
+  selA = selB = -1;
   await drawFrame(); drawTimeline(); hlTimeline();
 }
 function clearSel() { selA = selB = -1; drawTimeline(); hlTimeline(); }
@@ -301,13 +318,31 @@ function status(msg) {
   _stTimer = setTimeout(()=>document.getElementById('status').textContent='', 3000);
 }
 
+// ── Track navigation ──────────────────────────────────────────────────────────
+async function navigateTrack(delta) {
+  if (!ct) return;
+  const idx = summary.findIndex(t => t.id === ct.id);
+  const next = summary[idx + delta];
+  if (!next) return;
+  if (dirty.has(ct.id)) {
+    const ok = confirm(`Track #${String(ct.id).padStart(3,'0')} has unsaved changes.\nLeave without saving?`);
+    if (!ok) return;
+  }
+  await loadTrack(next.id);
+}
+
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', async e => {
   if (e.target.tagName==='INPUT') return;
   const sh = e.shiftKey ? 10 : 1;
   if (e.code==='Space')     { e.preventDefault(); togglePlay(); }
+  else if (e.code==='KeyR') { e.preventDefault(); await seekTo(0); startPlay(); }
   else if (e.code==='ArrowRight') { e.preventDefault(); await seekTo(fi+sh); }
   else if (e.code==='ArrowLeft')  { e.preventDefault(); await seekTo(fi-sh); }
+  else if (e.code==='BracketLeft')  { e.preventDefault(); await navigateTrack(-1); }
+  else if (e.code==='BracketRight') { e.preventDefault(); await navigateTrack(+1); }
+  else if (e.code==='KeyI')       { selA = fi; drawTimeline(); hlTimeline(); }
+  else if (e.code==='KeyO')       { selB = fi; drawTimeline(); hlTimeline(); }
   else if (e.code==='KeyS' && !e.ctrlKey && !e.metaKey) await setLbl(1);
   else if (e.code==='KeyN')       await setLbl(0);
   else if (e.code==='Escape')     clearSel();
